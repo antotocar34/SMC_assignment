@@ -86,12 +86,11 @@ class AdaptiveSMC:
         k = self.kernel_steps
         resample_indices = self.multinomial_draw()
         # Apply the metropolis step k times to each resampled particles
-        new_particles = np.zeros(self.particle_number)
+        new_particles = [None for _ in range(self.particle_number)]
         j = 0
         for i, n in enumerate(resample_indices):
             if n == 0:
                 continue
-            breakpoint()
             new_particles[j : j + n] = [
                 self.metropolis.kfold_steps(
                     self.particles[i], k,
@@ -102,6 +101,7 @@ class AdaptiveSMC:
             j += n
 
         self.particles = new_particles  # Update particles
+        print(self.particles)
         return
 
     def get_lambda(self):
@@ -293,7 +293,7 @@ class LatinSquareSMC(AdaptiveSMC):
 
 ## TESTING
 smc = LatinSquareSMC(
-    d=3,
+    d=4,
     kernel_steps=150,
     particle_number=5
 )
