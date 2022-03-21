@@ -5,6 +5,8 @@ Dau, Hai-Dang, and Nicolas Chopin. "Waste-free Sequential Monte Carlo." arXiv pr
 ``
 
 We first implement a generic Adaptive SMC Sampler Class.
+This class samples from a posterior `p` of the form
+`p(x) \propto m(x) exp(-V(x))`, where m is the prior and exp(-V) is the likelihood
 """
 
 import numpy as np
@@ -23,7 +25,7 @@ class SymmetricMetropolis:
         Draw a new sample from the kernel and accept/reject using
         Metropolis-Hastings.
         """
-        new = self.kernel(x)
+        new = self.kernel(x) # Draw a new sample from kernel
         accept_prob = min(1, pdf(new) / pdf(x))
         if rand.uniform(0, 1) < accept_prob:
             return new
@@ -53,7 +55,7 @@ class AdaptiveSMC:
         self.metropolis = SymmetricMetropolis(kernel)
         self.kernel_steps = kernel_steps
         self.particle_number = particle_number
-        self.initial_distribution = initial_distribution
+        self.initial_distribution = initial_distribution # This is the prior
         self.V = V
         # Initializing useful quantities for later
         self.iteration = 0  # Tracks the t variable
@@ -67,6 +69,9 @@ class AdaptiveSMC:
                                             # of the algorithm is pretty robust to this choice.
 
     def initial_sample(self):
+        """
+        Sample from prior.
+        """
         n = self.particle_number
         return self.initial_distribution.rvs(size=n)
 
@@ -101,7 +106,6 @@ class AdaptiveSMC:
             j += n
 
         self.particles = new_particles  # Update particles
-        print(self.particles)
         return
 
     def get_lambda(self):
@@ -127,13 +131,19 @@ class AdaptiveSMC:
                 )
             )
         ) - self.ess_min
-        delta = root_scalar(
-            f, bracket=[0, self.lambda_max]
-        ).root  # Not sure about this bracket argument
-        # TODO handle case when solution is not found
+        try:
+            delta = root_scalar(
+                f, 
+                bracket=[0, self.lambda_max - self.lambdas[-1]],
+                method="brentq"
+            ).root  # Not sure about this bracket argument
+        except ValueError: # <- If a solution is not found (see algorithm 17.3 in book)
+            delta = 1 - self.lambdas[-1]
+        assert delta > 0, f"delta: {delta}"
 
         # We deviate a little from the book here ;
         # the latin square sampler requires that lambda can go above 1.
+        # So we replace 1 with self.lambda_max
         if delta < self.lambda_max - self.lambdas[-1]:
             self.lambdas.append(self.lambdas[-1] + delta)
         else:
@@ -173,22 +183,18 @@ class AdaptiveSMC:
         return 1 / sum((W**2 for W in self.normalized_weights))
 
     def run(self):
-        """
-        Run the SMC algorithm.
-        Should the algorithm be adaptive??
-        """
-        self.particles = self.initial_sample()
-
         while self.lambdas[-1] < self.lambda_max:
-            if self.ess() < self.ess_min:
-                self.resample() # Resample and apply kernel steps
-                self.calc_weight(resample=True) # 
+            if self.iteration == 0:
+                self.particles = self.initial_sample() # Start with inital set of particles
             else:
-                self.calc_weight(resample=False)
+                self.resample() # Do resampling and metropolis kernel steps
+            self.get_lambda() # Calculate a new lambda by solving for lambda in ess - ess_min = 0
+            self.calc_weight() # Recalculate weights
+            print(f"Iteration {self.iteration} done!")
+            print(f"λ : {self.lambdas[-1]}")
 
-
-            lmda = self.get_lambda()
             self.iteration += 1
+
 
 def sample(d):
     """
@@ -221,7 +227,7 @@ def latin_kernel(x):
     return m
 
 
-def V(x):
+def V_latin(x):
     """
     Calculate score of latin square.
     """
@@ -242,7 +248,6 @@ class UniformPermutationMatrix(stats.rv_discrete):
     """
     Distribution of UniformPermutationMatrix
     """
-
     def __init__(self, d, seed=None):
         super().__init__(seed=seed)
         self.d = d
@@ -263,10 +268,11 @@ class UniformPermutationMatrix(stats.rv_discrete):
 
 
 class LatinSquareSMC(AdaptiveSMC):
-    EPSILON = 1e-16 # istance to log of normalizing constant
+    EPSILON = 1e-16
 
     def __init__(self, d, kernel_steps, particle_number):
         initial_distribution = UniformPermutationMatrix(d)
+        V = V_latin
         kernel = latin_kernel
         super().__init__(
             initial_distribution,
@@ -276,25 +282,13 @@ class LatinSquareSMC(AdaptiveSMC):
             particle_number,
             lambda_max = initial_distribution.logpdf(None) - np.log(self.EPSILON)
         )
-
-    def run(self):
-
-        while self.lambdas[-1] < self.lambda_max:
-            if self.iteration == 0:
-                self.particles = self.initial_sample() # Start with inital set of particles
-            else:
-                self.resample() # Do resampling and metropolis kernel steps
-            self.get_lambda()
-            self.calc_weight()
-            print(f"Iteration {self.iteration} done!")
-            self.iteration += 1
             
 
 
 ## TESTING
 smc = LatinSquareSMC(
     d=4,
-    kernel_steps=150,
-    particle_number=5
+    kernel_steps=50,
+    particle_number=300
 )
 smc.run()
