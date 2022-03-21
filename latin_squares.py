@@ -138,7 +138,7 @@ class AdaptiveSMC:
                 method="brentq"
             ).root  # Not sure about this bracket argument
         except ValueError: # <- If a solution is not found (see algorithm 17.3 in book)
-            delta = 1 - self.lambdas[-1]
+            delta = self.lambda_max - self.lambdas[-1]
         assert delta > 0, f"delta: {delta}"
 
         # We deviate a little from the book here ;
@@ -194,6 +194,9 @@ class AdaptiveSMC:
             print(f"λ : {self.lambdas[-1]}")
 
             self.iteration += 1
+
+    def calc_log_normalizing_constant(self):
+        raise NotImplementedError
 
 
 def sample(d):
