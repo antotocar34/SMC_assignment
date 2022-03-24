@@ -48,6 +48,9 @@ class Metropolis:
 
 
 class AdaptiveSMC:
+    """
+    Algorithm 17.3 of Omiros / Chopin Book
+    """
     def __init__(
         self,
         initial_distribution,
@@ -83,7 +86,6 @@ class AdaptiveSMC:
         """
         Returns an array of indices
         """
-        # so we can just apply to softmax to calculate normalized weights
         assert np.isclose(sum(self.normalized_weights), 1) # Sanity Check
         return multinomial(self.particle_number, self.normalized_weights).rvs()[0]
 
@@ -94,20 +96,20 @@ class AdaptiveSMC:
         """
         resample_indices = self.multinomial_draw()
         # Apply the metropolis step k times to each resampled particles
-        new_particles = [None for _ in range(self.particle_number)]
+        new_particles = [None for _ in range(self.particle_number)] # Initialize vector of new particles
         j = 0
+        # n = number of times the particle has been resampled
         for i, n in enumerate(resample_indices):
-            if n > 2: breakpoint()
-            if n == 0:
+            if n == 0: # If the particle is not being resampled at all
                 continue
-            test = [
+            # Apply k metropolis steps to this particle n times
+            new_particles[j : j + n] = [
                 self.metropolis.kfold_steps(
                     self.particles[i],
                     lambda x: np.exp(self.logscore(x, self.lambdas[-1]))
                 )
                 for _ in range(n)
             ]
-            new_particles[j : j + n] = test
             j += n
 
         self.particles = new_particles  # Update particles
@@ -225,9 +227,9 @@ def latin_kernel(x):
     and two columns j1 and j2 at random.
     then it swaps the values of x[i,j1] and x[i,j2]
     """
-    d = x.shape[1]
+    d = x.shape[0]
     m = x.copy()
-    i, j1, j2 = np.random.randint(low=0, high=d - 1, size=3)
+    i, j1, j2 = np.random.randint(low=0, high=d, size=3)
     x1 = x[i, j1]
     x2 = x[i, j2]
     m[i, j1] = x2
@@ -279,7 +281,7 @@ class LatinSquareSMC(AdaptiveSMC):
     """
     The sampler that instantiates the latin square sampler.
     """
-    EPSILON = 1e-16
+    EPSILON = 1e-16 # Precision of estimation of number latin squares
 
     def __init__(self, d, kernel_steps, particle_number):
         initial_distribution = UniformPermutationMatrix(d)
@@ -298,8 +300,20 @@ class LatinSquareSMC(AdaptiveSMC):
 
 ## TESTING
 smc = LatinSquareSMC(
-    d=4,
-    kernel_steps=5,
-    particle_number=5
+    d=5,
+    kernel_steps=500,
+    particle_number=5000
 )
 smc.run()
+
+## Test objects
+
+latins = [
+        np.matrix(
+            [
+                [0,1,2],
+                [1,2,0],
+                [2,0,1]
+            ]
+            )
+        ]
