@@ -9,6 +9,7 @@ This class samples from a posterior `p` of the form
 `p(x) \propto m(x) exp(-V(x))`, where m is the prior and exp(-V) is the likelihood
 """
 
+
 import numpy as np
 import random as rand
 from scipy.stats import multinomial
@@ -16,9 +17,13 @@ from scipy import stats
 from scipy.optimize import root_scalar
 from scipy.special import gammaln, softmax
 
-class SymmetricMetropolis:
-    def __init__(self, kernel):
+SEED = 42
+np.random.seed(42)
+
+class Metropolis:
+    def __init__(self, kernel, kernel_steps):
         self.kernel = kernel
+        self.kernel_steps = kernel_steps
 
     def draw(self, x, pdf):
         """
@@ -32,12 +37,12 @@ class SymmetricMetropolis:
         else:
             return x
 
-    def kfold_steps(self, x, k, pdf):
+    def kfold_steps(self, x, pdf):
         """
-        Apply the metropolis kernel k times
+        Apply the metropolis step `self.kernel_steps` times
         """
         out = x
-        for _ in range(k):
+        for _ in range(self.kernel_steps):
             out = self.draw(out, pdf)
         return out
 
@@ -52,10 +57,9 @@ class AdaptiveSMC:
         particle_number,
         lambda_max=1,
     ):
-        self.metropolis = SymmetricMetropolis(kernel)
-        self.kernel_steps = kernel_steps
+        self.metropolis = Metropolis(kernel, kernel_steps)
         self.particle_number = particle_number
-        self.initial_distribution = initial_distribution # This is the prior
+        self.initial_distribution = initial_distribution # This is the sample that you start with.
         self.V = V
         # Initializing useful quantities for later
         self.iteration = 0  # Tracks the t variable
@@ -88,21 +92,22 @@ class AdaptiveSMC:
         Choose indices to resample and apply k-fold Metropolis
         kernels.
         """
-        k = self.kernel_steps
         resample_indices = self.multinomial_draw()
         # Apply the metropolis step k times to each resampled particles
         new_particles = [None for _ in range(self.particle_number)]
         j = 0
         for i, n in enumerate(resample_indices):
+            if n > 2: breakpoint()
             if n == 0:
                 continue
-            new_particles[j : j + n] = [
+            test = [
                 self.metropolis.kfold_steps(
-                    self.particles[i], k,
+                    self.particles[i],
                     lambda x: np.exp(self.logscore(x, self.lambdas[-1]))
                 )
                 for _ in range(n)
             ]
+            new_particles[j : j + n] = test
             j += n
 
         self.particles = new_particles  # Update particles
@@ -271,6 +276,9 @@ class UniformPermutationMatrix(stats.rv_discrete):
 
 
 class LatinSquareSMC(AdaptiveSMC):
+    """
+    The sampler that instantiates the latin square sampler.
+    """
     EPSILON = 1e-16
 
     def __init__(self, d, kernel_steps, particle_number):
@@ -291,7 +299,7 @@ class LatinSquareSMC(AdaptiveSMC):
 ## TESTING
 smc = LatinSquareSMC(
     d=4,
-    kernel_steps=50,
-    particle_number=300
+    kernel_steps=5,
+    particle_number=5
 )
 smc.run()
