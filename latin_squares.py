@@ -1,3 +1,9 @@
+# TODO
+# 1. Implement calc_log_normalizing_constant method
+# 2. Put a bunch of assert statements to rule out possible mistakes
+# 3. Check that the UniformPermutationMatrix class makes sense with respect to what is 
+#    in the waste-free smc paper.
+
 """
 This is an implementation of the latin square sampler described in 
 ``
@@ -23,12 +29,13 @@ np.random.seed(42)
 class Metropolis:
     def __init__(self, kernel, kernel_steps):
         self.kernel = kernel
-        self.kernel_steps = kernel_steps
+        self.kernel_steps = kernel_steps # Number of times MCMC
+                                         # is applied to every particle
 
     def draw(self, x, pdf):
         """
         Draw a new sample from the kernel and accept/reject using
-        Metropolis-Hastings.
+        Metropolis.
         """
         new = self.kernel(x) # Draw a new sample from kernel
         accept_prob = min(1, pdf(new) / pdf(x))
@@ -49,7 +56,7 @@ class Metropolis:
 
 class AdaptiveSMC:
     """
-    Algorithm 17.3 of Omiros / Chopin Book
+    Algorithm 17.3 of Papaspiliopoulos / Chopin Book
     """
     def __init__(
         self,
@@ -72,7 +79,7 @@ class AdaptiveSMC:
         self.lambdas = [0]
         self.lambda_max = lambda_max # Maximum lambda, for a standard sampler this is 1
         self.ess_min = particle_number / 2  # Standard choice for ESS_min
-                                            # Omiros & Chopin states that the performance
+                                            # Papaspiliopoulos & Chopin states that the performance
                                             # of the algorithm is pretty robust to this choice.
 
     def initial_sample(self):
@@ -84,7 +91,14 @@ class AdaptiveSMC:
 
     def multinomial_draw(self):
         """
-        Returns an array of indices
+        Returns an array of indices.
+
+        For example:
+        if we have particles 5 particles,
+        then we might draw
+        [1,0,0,2,2]
+        which means we will resample particle 1 once
+        and particles 4 and 5 three times.
         """
         assert np.isclose(sum(self.normalized_weights), 1) # Sanity Check
         return multinomial(self.particle_number, self.normalized_weights).rvs()[0]
@@ -118,7 +132,7 @@ class AdaptiveSMC:
     def get_lambda(self):
         """
         Implement numerical root finding of optimal lambda parameter.
-        Pg. 336 of Omiros / Chopin.
+        Pg. 336 of Papaspiliopoulos / Chopin.
 
         Basically get the next lambda such that the resulting ESS
         is equal to the minimum ESS threshold.
@@ -163,7 +177,7 @@ class AdaptiveSMC:
         """
         return -(l * self.V(x)) - self.initial_distribution.logpdf(x)
 
-    def calc_weight(self, resample=False):
+    def calc_weight(self):
         if self.iteration == 0:
             self.unnormalized_logweights = [
                 self.initial_distribution.logpdf(p)
@@ -174,9 +188,8 @@ class AdaptiveSMC:
             lambda_t_minus_one = self.lambdas[-2]
             # If resampling happened, add nothing ; else we are just doing sequential
             # importance sampling, so multiply previous weights
-            w_hat = self.unnormalized_logweights if resample else np.zeros(self.particle_number)
             logweights = [
-                w_hat[i] + (self.logscore(p, lambda_t) - self.logscore(p, lambda_t_minus_one))
+                (self.logscore(p, lambda_t) - self.logscore(p, lambda_t_minus_one))
                 for (i, p) in enumerate(self.particles)
             ]
             self.unnormalized_logweights = logweights
@@ -213,6 +226,7 @@ def sample(d):
     return np.random.choice(range(d), size=d, replace=False)
 
 
+# TODO I'm not sure if this is actually correct
 def sample_matrix(d):
     """
     Sample a d x d matrix where every row is a permutation of
@@ -256,7 +270,7 @@ def V_latin(x):
 
 class UniformPermutationMatrix(stats.rv_discrete):
     """
-    Distribution of UniformPermutationMatrix
+    Uniform Distribution over permutation matrices
     """
     def __init__(self, d, seed=None):
         super().__init__(seed=seed)
@@ -293,7 +307,7 @@ class LatinSquareSMC(AdaptiveSMC):
             kernel,
             kernel_steps,
             particle_number,
-            lambda_max = initial_distribution.logpdf(None) - np.log(self.EPSILON)
+            lambda_max = initial_distribution.logpdf(None) - np.log(self.EPSILON) # Stop algorithm when lambda_t > log(p(d)/epsilon)
         )
             
 
@@ -301,8 +315,8 @@ class LatinSquareSMC(AdaptiveSMC):
 ## TESTING
 smc = LatinSquareSMC(
     d=5,
-    kernel_steps=500,
-    particle_number=5000
+    kernel_steps=50,
+    particle_number=5
 )
 smc.run()
 
