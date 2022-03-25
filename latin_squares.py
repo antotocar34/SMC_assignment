@@ -2,6 +2,7 @@
 # 1. Put a bunch of assert statements to rule out possible mistakes
 # 2. Check that the UniformPermutationMatrix class makes sense with respect to what is 
 #    in the waste-free smc paper. Not sure about the sampler
+# 3. Did I take care of the weight indexing properly after resampling?
 
 """
 This is an implementation of the latin square sampler described in 
@@ -52,11 +53,6 @@ class Metropolis:
             out = self.draw(out, pdf)
         return out
 
-class History:
-    """
-    Class that holds the values of weights at each iteration.
-    Is also used to calculate the normalising constant
-    """
 
 class AdaptiveSMC:
     """
@@ -86,11 +82,11 @@ class AdaptiveSMC:
         self.ess_min = particle_number * ess_min_ratio  # Papaspiliopoulos & Chopin states that the performance
                                                         # of the algorithm is pretty robust to this choice.
 
-        self.logLt = 0. # This will hold 
+        self.logLt = 0. # This will hold the cumulative value of the log normalising constant at time t.
 
     def initial_sample(self):
         """
-        Sample from prior.
+        Sample from the initial distribution.
         """
         n = self.particle_number
         return self.initial_distribution.rvs(size=n)
@@ -127,7 +123,7 @@ class AdaptiveSMC:
             new_particles[j : j + n] = [
                 self.metropolis.kfold_steps(
                     self.particles[i],
-                    lambda x: np.exp(self.logscore(x, self.lambdas[-1]))
+                    lambda x: np.exp(self.V(-self.lambdas[-1]*x))
                 )
                 for _ in range(n)
             ]
@@ -167,8 +163,11 @@ class AdaptiveSMC:
                 method="brentq"
             ).root  # Not sure about this bracket argument
         except ValueError: # <- If a solution is not found (see algorithm 17.3 in book)
+            print("Delta does not exist")
             delta = self.lambda_max - self.lambdas[-1]
         assert delta > 0, f"delta: {delta}"
+
+        print(f"δ_{self.iteration}: {delta}")
 
         # We deviate a little from the book here ;
         # the latin square sampler requires that lambda can go above 1.
@@ -195,8 +194,8 @@ class AdaptiveSMC:
             lambda_t = self.lambdas[-1]
             lambda_t_minus_one = self.lambdas[-2]
             logweights = [
-                (self.logscore(p, lambda_t) - self.logscore(p, lambda_t_minus_one))
-                for (i, p) in enumerate(self.particles)
+                - ( lambda_t - lambda_t_minus_one ) * self.V(p)
+                for p in self.particles
             ]
             self.unnormalized_logweights = logweights
         self.normalized_weights = softmax(self.unnormalized_logweights)
@@ -217,7 +216,7 @@ class AdaptiveSMC:
             self.get_lambda() # Calculate a new lambda by solving for lambda in ess - ess_min = 0
             self.calc_weight() # Recalculate weights
             print(f"Iteration {self.iteration} done!")
-            print(f"λ : {self.lambdas[-1]}")
+            print(f"λ_{self.iteration} : {self.lambdas[-1]}")
 
             self.calc_log_normalizing_constant_and_update()
 
@@ -303,10 +302,10 @@ class UniformPermutationMatrix(stats.rv_discrete):
 
     def logpdf(self, x):
         """
-        Compute the log of (d!)**d
+        Compute the log of 1 / (d!)**d
         """
         d = self.d
-        return d * gammaln(d + 1)
+        return -(d * gammaln(d + 1))
 
 
 
@@ -314,7 +313,7 @@ class LatinSquareSMC(AdaptiveSMC):
     """
     The sampler that instantiates the latin square sampler.
     """
-    EPSILON = 1e-16 # Precision of estimation of number latin squares
+    EPSILON = 1e-2 # Precision of estimation of number latin squares
 
     def __init__(self, d, kernel_steps, particle_number):
         initial_distribution = UniformPermutationMatrix(d)
