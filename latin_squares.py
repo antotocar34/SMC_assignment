@@ -253,20 +253,21 @@ def sample_matrix(d):
     return np.matrix([sample(d) for _ in range(d)])
 
 
-def latin_kernel(x):
-    """
-    Takes a d x d matrix and selects a row i
-    and two columns j1 and j2 at random.
-    then it swaps the values of x[i,j1] and x[i,j2]
-    """
-    d = x.shape[0]
-    m = x.copy()
-    i, j1, j2 = np.random.randint(low=0, high=d, size=3)
-    x1 = x[i, j1]
-    x2 = x[i, j2]
-    m[i, j1] = x2
-    m[i, j2] = x1
-    return m
+class LatinKernel:
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def sample(x):
+        """
+        Takes a d x d matrix and selects a row i
+        and two columns j1 and j2 at random.
+        then it swaps the values of x[i,j1] and x[i,j2]
+        """
+        d = x.shape[0]
+        i, j1, j2 = np.random.randint(low=0, high=d, size=3)
+        x[i, j1], x[i, j2] = x[i, j2], x[i, j1]
+        return x
 
 
 def V_latin(x):
