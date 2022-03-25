@@ -1,8 +1,7 @@
 # TODO
-# 1. Implement calc_log_normalizing_constant method
-# 2. Put a bunch of assert statements to rule out possible mistakes
-# 3. Check that the UniformPermutationMatrix class makes sense with respect to what is 
-#    in the waste-free smc paper.
+# 1. Put a bunch of assert statements to rule out possible mistakes
+# 2. Check that the UniformPermutationMatrix class makes sense with respect to what is 
+#    in the waste-free smc paper. Not sure about the sampler
 
 """
 This is an implementation of the latin square sampler described in 
@@ -53,6 +52,11 @@ class Metropolis:
             out = self.draw(out, pdf)
         return out
 
+class History:
+    """
+    Class that holds the values of weights at each iteration.
+    Is also used to calculate the normalising constant
+    """
 
 class AdaptiveSMC:
     """
@@ -66,10 +70,11 @@ class AdaptiveSMC:
         kernel_steps,
         particle_number,
         lambda_max=1,
+        ess_min_ratio = 1/2
     ):
         self.metropolis = Metropolis(kernel, kernel_steps)
         self.particle_number = particle_number
-        self.initial_distribution = initial_distribution # This is the sample that you start with.
+        self.initial_distribution = initial_distribution # This is the distribution that you start with.
         self.V = V
         # Initializing useful quantities for later
         self.iteration = 0  # Tracks the t variable
@@ -78,9 +83,10 @@ class AdaptiveSMC:
         self.normalized_logweights = None
         self.lambdas = [0]
         self.lambda_max = lambda_max # Maximum lambda, for a standard sampler this is 1
-        self.ess_min = particle_number / 2  # Standard choice for ESS_min
-                                            # Papaspiliopoulos & Chopin states that the performance
-                                            # of the algorithm is pretty robust to this choice.
+        self.ess_min = particle_number * ess_min_ratio  # Papaspiliopoulos & Chopin states that the performance
+                                                        # of the algorithm is pretty robust to this choice.
+
+        self.logLt = 0. # This will hold 
 
     def initial_sample(self):
         """
@@ -111,6 +117,7 @@ class AdaptiveSMC:
         resample_indices = self.multinomial_draw()
         # Apply the metropolis step k times to each resampled particles
         new_particles = [None for _ in range(self.particle_number)] # Initialize vector of new particles
+        print("Doing Metropolis Resampling...")
         j = 0
         # n = number of times the particle has been resampled
         for i, n in enumerate(resample_indices):
@@ -127,6 +134,7 @@ class AdaptiveSMC:
             j += n
 
         self.particles = new_particles  # Update particles
+        print("Done!")
         return
 
     def get_lambda(self):
@@ -186,8 +194,6 @@ class AdaptiveSMC:
         else:
             lambda_t = self.lambdas[-1]
             lambda_t_minus_one = self.lambdas[-2]
-            # If resampling happened, add nothing ; else we are just doing sequential
-            # importance sampling, so multiply previous weights
             logweights = [
                 (self.logscore(p, lambda_t) - self.logscore(p, lambda_t_minus_one))
                 for (i, p) in enumerate(self.particles)
@@ -213,10 +219,23 @@ class AdaptiveSMC:
             print(f"Iteration {self.iteration} done!")
             print(f"λ : {self.lambdas[-1]}")
 
+            self.calc_log_normalizing_constant_and_update()
+
             self.iteration += 1
 
-    def calc_log_normalizing_constant(self):
-        raise NotImplementedError
+    def calc_log_normalizing_constant_and_update(self):
+        """
+        See pg 305 of Papaspiliopoulos / Chopin.
+        I cross referenced with the `particles` library by Chopin.
+
+        We can caluculate logLt by 
+        logLt = \sum_{s=0}^{t} log( \sum_{n=1}^{N} w_s^n )
+
+        So for every iteration, we add calculate the log normalising constant
+        and add it to `self.LogLt`.
+        """
+        self.logLt += np.log( np.mean(np.exp(self.unnormalized_logweights)) )
+
 
 
 def sample(d):
@@ -309,6 +328,10 @@ class LatinSquareSMC(AdaptiveSMC):
             particle_number,
             lambda_max = initial_distribution.logpdf(None) - np.log(self.EPSILON) # Stop algorithm when lambda_t > log(p(d)/epsilon)
         )
+
+    def run(self):
+        super().run()
+        return self.logLt
             
 
 
@@ -316,9 +339,9 @@ class LatinSquareSMC(AdaptiveSMC):
 smc = LatinSquareSMC(
     d=5,
     kernel_steps=50,
-    particle_number=5
+    particle_number=200
 )
-smc.run()
+logLt = smc.run()
 
 ## Test objects
 
@@ -331,3 +354,6 @@ latins = [
             ]
             )
         ]
+
+# True number of latin squares
+latin_sequence = [1, 2, 12, 576, 161280, 812851200, 61479419904000, 108776032459082956800, 5524751496156892842531225600, 9982437658213039871725064756920320000, 776966836171770144107444346734230682311065600000]
