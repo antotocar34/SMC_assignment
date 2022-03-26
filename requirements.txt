@@ -43,3 +43,6 @@ scipy==1.8.0; python_version >= "3.8" and python_version < "3.11" \
     --hash=sha256:3d573228c10a3a8c32b9037be982e6440e411b443a6267b067cac72f690b8d56 \
     --hash=sha256:bb7088e89cd751acf66195d2f00cf009a1ea113f3019664032d9075b1e727b6c \
     --hash=sha256:31d4f2d6b724bc9a98e527b5849b8a7e589bf1ea630c33aa563eda912c9ff0bd
+
+numpy~=1.22.2
+scipy~=1.8.0
