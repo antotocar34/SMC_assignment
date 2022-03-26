@@ -163,7 +163,7 @@ class AdaptiveSMC:
                 method="brentq"
             ).root  # Not sure about this bracket argument
         except ValueError: # <- If a solution is not found (see algorithm 17.3 in book)
-            print("Delta does not exist")
+            print("Delta cannot be solved for.")
             delta = self.lambda_max - self.lambdas[-1]
         assert delta > 0, f"delta: {delta}"
 
@@ -182,7 +182,7 @@ class AdaptiveSMC:
         """
         Calculate intermediate distribution without the normalising constant.
         """
-        return -(l * self.V(x)) - self.initial_distribution.logpdf(x)
+        return self.initial_distribution.logpdf(x) + -(l * self.V(x)) 
 
     def calc_weight(self):
         if self.iteration == 0:
@@ -227,7 +227,7 @@ class AdaptiveSMC:
         See pg 305 of Papaspiliopoulos / Chopin.
         I cross referenced with the `particles` library by Chopin.
 
-        We can caluculate logLt by 
+        We can calculate logLt by 
         logLt = \sum_{s=0}^{t} log( \sum_{n=1}^{N} w_s^n )
 
         So for every iteration, we add calculate the log normalising constant
@@ -315,7 +315,7 @@ class LatinSquareSMC(AdaptiveSMC):
     """
     EPSILON = 1e-2 # Precision of estimation of number latin squares
 
-    def __init__(self, d, kernel_steps, particle_number):
+    def __init__(self, d, kernel_steps, particle_number, ess_min_ratio=1/2):
         initial_distribution = UniformPermutationMatrix(d)
         V = V_latin
         kernel = latin_kernel
@@ -325,7 +325,8 @@ class LatinSquareSMC(AdaptiveSMC):
             kernel,
             kernel_steps,
             particle_number,
-            lambda_max = initial_distribution.logpdf(None) - np.log(self.EPSILON) # Stop algorithm when lambda_t > log(p(d)/epsilon)
+            lambda_max = initial_distribution.logpdf(None) - np.log(self.EPSILON), # Stop algorithm when lambda_t > log(p(d)/epsilon)
+            ess_min_ratio = ess_min_ratio
         )
 
     def run(self):
@@ -336,11 +337,13 @@ class LatinSquareSMC(AdaptiveSMC):
 
 ## TESTING
 smc = LatinSquareSMC(
-    d=5,
+    d=2,
     kernel_steps=50,
-    particle_number=200
+    particle_number=5000,
+    ess_min_ratio = 0.8
 )
 logLt = smc.run()
+print(f"Number of latin squares: {np.exp(logLt)}")
 
 ## Test objects
 
