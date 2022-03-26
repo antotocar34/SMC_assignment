@@ -158,7 +158,6 @@ class AdaptiveSMC:
         self.lambd = self.lambd + delta
         return
 
-
     def calc_weight(self) -> None:  # DONE
         self.w_log = np.array([- self.delta * self.V(p)
                                for p in self.particles])
@@ -190,7 +189,7 @@ class AdaptiveSMC:
         See pg 305 of Papaspiliopoulos / Chopin.
         I cross referenced with the `particles` library by Chopin.
 
-        We can caluculate logLt by
+        We can calculate logLt by
         logLt = \sum_{s=0}^{t} log( \sum_{n=1}^{N} w_s^n )
 
         So for every iteration, we add calculate the log normalising constant
@@ -294,7 +293,6 @@ class LatinSquareSMC(AdaptiveSMC):
             lambda_max=prior.logpdf() - np.log(self.eps)  # Stop algorithm when lambda_t >= log(p(d)/epsilon)
         )
             
-
 if __name__ == '__main__':
     d = 4
     kernel_steps = 500
