@@ -71,7 +71,7 @@ class AdaptiveSMC:
         self.particles = None
         self.w_log = None
         self.w_normalized = None
-        self.lambd = 0
+        self._lambda = 0
         self.delta = 0
         self.lambda_max = lambda_max  # Maximum lambda, for a standard sampler this is 1
         self.ess_min = particle_number * ess_min_ratio  # Papaspiliopoulos & Chopin states that the performance
@@ -110,7 +110,6 @@ class AdaptiveSMC:
         print("Doing Metropolis Resampling...")
         j = 0
         # n = number of times the particle has been resampled
-        ## for i, n in enumerate(resample_indices):
         for particle_idx in (counter := Counter(resample_indices)):
             n = counter[particle_idx]
             if n == 0:  # If the particle is not being resampled at all
@@ -119,7 +118,7 @@ class AdaptiveSMC:
             new_particles[j:(j + n)] = [
                 self.metropolis.kfold_steps(
                     self.particles[particle_idx],
-                    lambda x: np.exp(-self.lambd * self.V(x))  # here we don't use nu since it's const.: 1/(d!)^d
+                    lambda x: np.exp(-self._lambda * self.V(x))  # here we don't use nu since it's const.: 1/(d!)^d
                 )
                 for _ in range(n)
             ]
@@ -131,10 +130,9 @@ class AdaptiveSMC:
 
     def ess_form(self, delta):  # DONE
         V = np.array([self.V(p) for p in self.particles])
-        w = np.exp(- delta * V)
-        return np.sum(w)**2 / np.sum(w**2)
+        return np.sum(np.exp(- delta * V))**2 / np.sum(np.exp(- 2 * delta * V))
 
-    def get_lambda(self):  # DONE
+    def update_lambda(self):  # DONE
         """
         Implement numerical root finding of optimal lambda parameter.
         Pg. 336 of Papaspiliopoulos / Chopin.
@@ -145,9 +143,9 @@ class AdaptiveSMC:
         try:
             delta = root_scalar(lambda d: self.ess_form(d) - self.ess_min,
                                 method='brentq',
-                                bracket=[0, self.lambda_max - self.lambd]).root
+                                bracket=[0, self.lambda_max - self._lambda]).root
         except ValueError:
-            delta = self.lambda_max - self.lambd
+            delta = self.lambda_max - self._lambda
         assert delta > 0, f"delta: {delta}"
         print(f"δ_{self.iteration}: {delta}")
 
@@ -155,10 +153,10 @@ class AdaptiveSMC:
         # the latin square sampler requires that lambda can go above 1.
         # So we replace 1 with self.lambda_max
         self.delta = delta
-        self.lambd = self.lambd + delta
+        self._lambda = self._lambda + delta
         return
 
-    def calc_weight(self) -> None:  # DONE
+    def update_weights(self) -> None:  # DONE
         self.w_log = np.array([- self.delta * self.V(p)
                                for p in self.particles])
         self.w_normalized = softmax(self.w_log)
@@ -171,16 +169,16 @@ class AdaptiveSMC:
 
     def run(self):  # DONE
         print(f"λmax = {self.lambda_max}")
-        while self.lambd < self.lambda_max:
+        while self._lambda < self.lambda_max:
             self.iteration += 1
             if self.iteration == 0:
                 self.particles = self.initial_sample()  # Start with inital set of particles
             else:
                 self.resample()  # Do resampling and metropolis kernel steps
-            self.get_lambda()  # Calculate a new lambda by solving for lambda in ess - ess_min = 0
-            self.calc_weight()  # Recalculate weights
+            self.update_lambda()  # Calculate a new lambda by solving for lambda in ess - ess_min = 0
+            self.update_weights()  # Recalculate weights
             print(f"Iteration {self.iteration} done!")
-            print(f"λ_{self.iteration} : {self.lambd}")
+            print(f"λ_{self.iteration} : {self._lambda}")
             self.calc_log_normalizing_constant_and_update()
         print('SMC finished!')
 
@@ -232,7 +230,7 @@ def V_latin(x):  # DONE
     Calculate score of latin square.
     """
     d = x.shape[1]
-    return sum(sum(sum(x[i, j] == l for i in range(d))**2 for l in range(d)) - d for j in range(d))
+    return sum(sum(sum(x[i, j] == l for i in range(d))**2 for l in range(d)) for j in range(d)) - d**2
 
 
 class UniformPermutationMatrix:  # DONE
