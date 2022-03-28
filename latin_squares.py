@@ -192,7 +192,7 @@ class AdaptiveSMC:
         See pg 305 of Papaspiliopoulos / Chopin.
         I cross referenced with the `particles` library by Chopin.
 
-        We can calculate logLt by
+        We can caluculate logLt by
         logLt = \sum_{s=0}^{t} log( \sum_{n=1}^{N} w_s^n )
 
         So for every iteration, we add calculate the log normalising constant
@@ -297,6 +297,7 @@ class LatinSquareSMC(AdaptiveSMC):
             verbose=verbose
         )
             
+
 if __name__ == '__main__':
     d = 4
     kernel_steps = 500
