@@ -69,8 +69,8 @@ class AdaptiveSMC:
         # Initializing useful quantities for later
         self.iteration = -1  # Tracks the t variable
         self.particles = None
-        self.w_log = None
-        self.w_normalized = None
+        self.w_log = None # unnormalized logweights
+        self.w_normalized = None # normalized weights
         self._lambda = 0
         self.delta = 0
         self.lambda_max = lambda_max  # Maximum lambda, for a standard sampler this is 1
@@ -94,7 +94,7 @@ class AdaptiveSMC:
         then we might draw
         [1,0,0,2,2]
         which means we will resample particle 1 once
-        and particles 4 and 5 three times.
+        and particles 4 and 5 two times.
         """
         assert self.w_normalized is None or np.isclose(sum(self.w_normalized), 1)  # Sanity Check
         return multinomial(n=self.particle_number, p=self.w_normalized).rvs()[0]
@@ -128,11 +128,11 @@ class AdaptiveSMC:
         print("Done!")
         return
 
-    def ess_form(self, delta):  # DONE
+    def ess_form(self, delta):
         V = np.array([self.V(p) for p in self.particles])
         return np.sum(np.exp(- delta * V))**2 / np.sum(np.exp(- 2 * delta * V))
 
-    def update_lambda(self):  # DONE
+    def update_lambda(self):
         """
         Implement numerical root finding of optimal lambda parameter.
         Pg. 336 of Papaspiliopoulos / Chopin.
@@ -196,7 +196,7 @@ class AdaptiveSMC:
         self.logLt += np.log(np.mean(np.exp(self.w_log)))
 
 
-def sample(d, seed=None):  # DONE
+def sample(d, seed=None):
     """
     Sample a permutation of 0, 1, ..., d-1
     """
@@ -205,7 +205,7 @@ def sample(d, seed=None):  # DONE
     return np.random.permutation(d)
 
 
-class LatinKernel:  # DONE
+class LatinKernel:
     def __init__(self):
         pass
 
@@ -294,7 +294,7 @@ class LatinSquareSMC(AdaptiveSMC):
 if __name__ == '__main__':
     d = 4
     kernel_steps = 500
-    particle_number = int(2e5 / kernel_steps)
+    particle_number = int(2e6 / kernel_steps)
     smc = LatinSquareSMC(
         d=d,
         kernel_steps=kernel_steps,
@@ -302,19 +302,6 @@ if __name__ == '__main__':
     )
     smc.run()
     p_d = UniformPermutationMatrix(d).logpdf()
-    print(math.factorial(d)**d * np.exp(smc.logLt))
-    # Test objects
-    # latins = [
-    #     np.matrix(
-    #         [
-    #             [0,1,2],
-    #             [1,2,0],
-    #             [2,0,1]
-    #         ]
-    #     )
-    # ]
-    
+    print(f"Estimated number of latin squares for d = {d}: {math.factorial(d)**d * np.exp(smc.logLt)}")
     # True number of latin squares
-    # latin_sequence = [1, 2, 12, 576, 161280, 812851200, 61479419904000, 108776032459082956800,
-    #                   5524751496156892842531225600, 9982437658213039871725064756920320000,
-    #                   776966836171770144107444346734230682311065600000]
+    latin_sequence = [1, 2, 12, 576, 161280, 812851200, 61479419904000, 108776032459082956800, 5524751496156892842531225600, 9982437658213039871725064756920320000, 776966836171770144107444346734230682311065600000]
