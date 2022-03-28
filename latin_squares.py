@@ -18,13 +18,9 @@ from copy import deepcopy
 from collections import Counter
 
 
-SEED = 42
-np.random.seed(SEED)
-
-
 class Metropolis:  # DONE
-    def __init__(self, kernel, kernel_steps):
-        self.kernel = kernel
+    def __init__(self, kernel: callable, kernel_steps: int):
+        self.kernel = kernel  # Object which has method 'sample'.
         self.kernel_steps = kernel_steps  # Number of times MCMC is applied to every particle
 
     def draw(self, x, pdf):
@@ -54,18 +50,23 @@ class AdaptiveSMC:
     """
     def __init__(
         self,
-        prior,
-        V,
-        kernel,
-        kernel_steps,
-        particle_number,
-        lambda_max=1,
-        ess_min_ratio=1/2
+        prior: callable,
+        V: callable,
+        kernel: callable,
+        kernel_steps: int,
+        particle_number: int,
+        lambda_max: float = 1.,
+        ess_min_ratio: float = 1/2,
+        verbose: bool = False
     ):
-        self.metropolis = Metropolis(kernel, kernel_steps)
-        self.particle_number = particle_number
         self.prior = prior  # This is the distribution that you start with.
+        self.metropolis = Metropolis(kernel, kernel_steps)
         self.V = V
+        self.particle_number = particle_number
+        self.lambda_max = lambda_max  # Maximum lambda, for a standard sampler this is 1
+        self.verbose = verbose
+        self.ess_min = particle_number * ess_min_ratio  # Papaspiliopoulos & Chopin states that the performance
+                                                        # of the algorithm is pretty robust to this choice.
         # Initializing useful quantities for later
         self.iteration = -1  # Tracks the t variable
         self.particles = None
@@ -73,9 +74,6 @@ class AdaptiveSMC:
         self.w_normalized = None
         self._lambda = 0
         self.delta = 0
-        self.lambda_max = lambda_max  # Maximum lambda, for a standard sampler this is 1
-        self.ess_min = particle_number * ess_min_ratio  # Papaspiliopoulos & Chopin states that the performance
-                                                        # of the algorithm is pretty robust to this choice.
         self.logLt = 0.  # This will hold the cumulative value of the log normalising constant at time t.
 
     def initial_sample(self):  # DONE
@@ -107,7 +105,8 @@ class AdaptiveSMC:
         resample_indices = self.multinomial_draw()
         # Apply the metropolis step k times to each resampled particles
         new_particles = [None] * self.particle_number  # Initialize vector of new particles
-        print("Doing Metropolis Resampling...")
+        if self.verbose:
+            print("Doing Metropolis Resampling...")
         j = 0
         # n = number of times the particle has been resampled
         for particle_idx in (counter := Counter(resample_indices)):
@@ -125,7 +124,8 @@ class AdaptiveSMC:
             j += n
 
         self.particles = new_particles  # Update particles
-        print("Done!")
+        if self.verbose:
+            print("Resampling done!")
         return
 
     def ess_form(self, delta):  # DONE
@@ -147,7 +147,8 @@ class AdaptiveSMC:
         except ValueError:
             delta = self.lambda_max - self._lambda
         assert delta > 0, f"delta: {delta}"
-        print(f"δ_{self.iteration}: {delta}")
+        if self.verbose:
+            print(f"δ_{self.iteration}: {delta}")
 
         # We deviate a little from the book here ;
         # the latin square sampler requires that lambda can go above 1.
@@ -168,7 +169,9 @@ class AdaptiveSMC:
         return 1 / sum((W**2 for W in self.w_normalized))
 
     def run(self):  # DONE
-        print(f"λmax = {self.lambda_max}")
+        if self.verbose:
+            print('---SMC started---')
+            print(f"λ_max = {self.lambda_max}\n")
         while self._lambda < self.lambda_max:
             self.iteration += 1
             if self.iteration == 0:
@@ -177,12 +180,14 @@ class AdaptiveSMC:
                 self.resample()  # Do resampling and metropolis kernel steps
             self.update_lambda()  # Calculate a new lambda by solving for lambda in ess - ess_min = 0
             self.update_weights()  # Recalculate weights
-            print(f"Iteration {self.iteration} done!")
-            print(f"λ_{self.iteration} : {self._lambda}")
-            self.calc_log_normalizing_constant_and_update()
-        print('SMC finished!')
+            self.update_logLt()  # Update the normalizing constant
+            if self.verbose:
+                print(f"Iteration {self.iteration} done!")
+                print(f"λ_{self.iteration} : {self._lambda}")
+        if self.verbose:
+            print('---SMC finished---\n')
 
-    def calc_log_normalizing_constant_and_update(self):  # DONE
+    def update_logLt(self):  # DONE
         """
         See pg 305 of Papaspiliopoulos / Chopin.
         I cross referenced with the `particles` library by Chopin.
@@ -276,9 +281,9 @@ class LatinSquareSMC(AdaptiveSMC):
     """
     The sampler that instantiates the latin square sampler.
     """
-    eps = 1e-16  # Precision of estimation of number latin squares
 
-    def __init__(self, d, kernel_steps, particle_number):
+    def __init__(self, d: int, kernel_steps: int, particle_number: int, verbose: bool = False, eps: float = 1e-16):
+        self.eps = eps
         prior = UniformPermutationMatrix(d)
         V = V_latin
         kernel = LatinKernel()
@@ -288,7 +293,8 @@ class LatinSquareSMC(AdaptiveSMC):
             kernel,
             kernel_steps,
             particle_number,
-            lambda_max=prior.logpdf() - np.log(self.eps)  # Stop algorithm when lambda_t >= log(p(d)/epsilon)
+            lambda_max=prior.logpdf() - np.log(self.eps),  # Stop algorithm when lambda_t >= log(p(d)/epsilon)
+            verbose=verbose
         )
             
 
